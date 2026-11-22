@@ -1,7 +1,9 @@
 package com.cri.tabata
 
+import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
@@ -75,6 +77,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -86,7 +89,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 val Ink = Color(0xFF070B16)
 val Coral = Color(0xFFFF5A4E)
@@ -127,6 +132,9 @@ sealed interface Screen {
 fun App(store: Store) {
     var workouts by remember { mutableStateOf(store.load()) }
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    val context = LocalContext.current
+    var update by remember { mutableStateOf<Update?>(null) }
+    LaunchedEffect(Unit) { update = withContext(Dispatchers.IO) { latestUpdate(BuildConfig.VERSION_CODE) } }
     fun save(list: List<Workout>) {
         workouts = list
         store.save(list)
@@ -136,7 +144,11 @@ fun App(store: Store) {
     when (val s = screen) {
         Screen.Home -> Backdrop(Coral) {
             HomeScreen(
-                workouts,
+                workouts, update,
+                onUpdate = { u ->
+                    // the browser downloads the APK; tapping the download installs it over this version
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u.apkUrl))) }
+                },
                 onNew = { screen = Screen.Edit(Workout(), true) },
                 onEdit = { screen = Screen.Edit(it, false) },
                 onRun = { screen = Screen.Run(it) },
@@ -220,7 +232,7 @@ fun SectionLabel(text: String) =
 // ---------- Home ----------
 
 @Composable
-fun HomeScreen(list: List<Workout>, onNew: () -> Unit, onEdit: (Workout) -> Unit, onRun: (Workout) -> Unit) {
+fun HomeScreen(list: List<Workout>, update: Update?, onUpdate: (Update) -> Unit, onNew: () -> Unit, onEdit: (Workout) -> Unit, onRun: (Workout) -> Unit) {
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(28.dp))
         Text("Allenamenti", fontSize = 34.sp, fontWeight = FontWeight.Bold)
@@ -232,6 +244,11 @@ fun HomeScreen(list: List<Workout>, onNew: () -> Unit, onEdit: (Workout) -> Unit
             contentPadding = PaddingValues(bottom = 16.dp),
         ) {
             items(list, key = { it.id }) { w -> WorkoutCard(w, { onRun(w) }, { onEdit(w) }) }
+        }
+        if (update != null) {
+            Pill("Aggiorna alla build ${update.build}", { onUpdate(update) }, Modifier.fillMaxWidth().padding(bottom = 12.dp), Mint) {
+                Icon(Icons.Default.Refresh, null, Modifier.size(22.dp))
+            }
         }
         Pill("Nuovo allenamento", onNew, Modifier.fillMaxWidth().padding(bottom = 12.dp), Coral) {
             Icon(Icons.Default.Add, null, Modifier.size(22.dp))

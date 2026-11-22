@@ -11,10 +11,20 @@ android {
         applicationId = "com.cri.tabata"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // CI run number = build number, compared against the latest GitHub release to offer updates
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+        versionName = "build $versionCode"
     }
-    buildFeatures { compose = true }
+    // same key on every CI build, so updates install over the previous version; without the secret, the default debug key is used
+    System.getenv("KEYSTORE_PASSWORD")?.takeIf { it.isNotEmpty() }?.let { pw ->
+        signingConfigs.getByName("debug") {
+            storeFile = file("timer.p12")
+            storePassword = pw
+            keyAlias = "timer"
+            keyPassword = pw
+        }
+    }
+    buildFeatures { compose = true; buildConfig = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
