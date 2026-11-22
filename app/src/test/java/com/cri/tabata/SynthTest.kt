@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
-import kotlin.random.Random
 
 class SynthTest {
     private fun peak(a: ShortArray, from: Double, to: Double) =
@@ -12,14 +11,14 @@ class SynthTest {
 
     @Test
     fun soundsAreAudibleAndDistinct() {
-        listOf(Synth.countdown(), Synth.workBell(), Synth.restChime(), Synth.startWhistle(), Synth.endWhistle())
+        listOf(Synth.countdown(), Synth.workBell(), Synth.restChime(), Synth.startChime(), Synth.endChime())
             .forEach { assertTrue(peak(it, 0.0, 0.1) > 5000) }
-        assertEquals((1.7 * Synth.RATE).toInt(), Synth.endWhistle().size)
+        assertEquals((2.4 * Synth.RATE).toInt(), Synth.endChime().size)
     }
 
     @Test
-    fun endWhistleHasGapsBetweenBlasts() {
-        assertEquals(0.0, Synth.whistle(0.22, 2700.0, listOf(0.0 to 0.18, 0.28 to 0.18), Random(0)), 0.0)
+    fun endChimeNeverClips() {
+        assertTrue(peak(Synth.endChime(), 0.0, 2.4) < 30000)
     }
 
     @Test

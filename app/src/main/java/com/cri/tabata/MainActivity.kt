@@ -69,6 +69,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -257,7 +258,7 @@ fun HomeScreen(list: List<Workout>, update: Update?, onUpdate: (Update) -> Unit,
 
 @Composable
 fun WorkoutCard(w: Workout, onRun: () -> Unit, onEdit: () -> Unit) {
-    Row(Modifier.fillMaxWidth().press(onRun).glass().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().glass().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(w.name, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))
@@ -403,7 +404,9 @@ fun RunScreen(w: Workout, onExit: () -> Unit) {
     val leftMs = if (running) (endAt - now).coerceAtLeast(0) else pausedLeft
     val secLeft = ((leftMs + 999) / 1000).toInt()
     val frac = if (done) 1f else leftMs / (phase.seconds * 1000f)
-    val totalLeft = if (done) 0 else secLeft + phases.drop(index + 1).sumOf { it.seconds }
+    val restSec = phases.drop(index + 1).sumOf { it.seconds }
+    val totalLeft = if (done) 0 else secLeft + restSec
+    val totalFrac = if (done) 0f else (leftMs + restSec * 1000L) / (w.totalSeconds() * 1000f)
     val accent = if (done) Mint else phase.kind.color
     val ring by animateColorAsState(accent, tween(500), label = "ring")
 
@@ -481,7 +484,9 @@ fun RunScreen(w: Workout, onExit: () -> Unit) {
                 }
             }
             Column(
-                Modifier.fillMaxWidth().padding(bottom = 12.dp).glass(RoundedCornerShape(24.dp)).padding(vertical = 10.dp),
+                Modifier.fillMaxWidth().padding(bottom = 12.dp).glass(RoundedCornerShape(24.dp))
+                    .drawBehind { drawRect(ring.copy(alpha = .45f), size = Size(size.width * totalFrac, size.height)) }
+                    .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text("TEMPO TOTALE RIMANENTE", color = Dim, fontSize = 13.sp, letterSpacing = 1.sp)
