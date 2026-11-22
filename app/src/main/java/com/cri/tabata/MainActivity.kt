@@ -1,8 +1,6 @@
 package com.cri.tabata
 
 import android.content.Intent
-import android.media.AudioManager
-import android.media.ToneGenerator
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
@@ -21,6 +19,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -357,19 +356,20 @@ fun RunScreen(w: Workout, onExit: () -> Unit) {
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     var endAt by remember { mutableLongStateOf(now + phases[0].seconds * 1000L) }
     var pausedLeft by remember { mutableLongStateOf(phases[0].seconds * 1000L) }
-    val tone = remember { runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 90) }.getOrNull() }
+    val sounds = remember { Sounds() }
     val view = LocalView.current
     DisposableEffect(Unit) {
         // shortcut: no foreground service, so the timer only runs reliably with the app on screen; add one if users lock the phone mid-workout
         view.keepScreenOn = true
-        onDispose { view.keepScreenOn = false; tone?.release() }
+        sounds.play(sounds.start)
+        onDispose { view.keepScreenOn = false; sounds.release() }
     }
     BackHandler(onBack = onExit)
 
     fun go(i: Int) {
         if (i > phases.lastIndex) {
             done = true; running = false; pausedLeft = 0
-            tone?.startTone(ToneGenerator.TONE_PROP_PROMPT, 900)
+            sounds.play(sounds.end)
             return
         }
         index = i.coerceAtLeast(0)
@@ -377,7 +377,13 @@ fun RunScreen(w: Workout, onExit: () -> Unit) {
         now = SystemClock.elapsedRealtime()
         endAt = now + ms
         pausedLeft = ms
-        tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 300)
+        sounds.play(
+            when {
+                index == 0 -> sounds.start
+                phases[index].kind == Kind.WORK -> sounds.work
+                else -> sounds.rest
+            },
+        )
     }
 
     LaunchedEffect(running) {
@@ -386,7 +392,7 @@ fun RunScreen(w: Workout, onExit: () -> Unit) {
             now = SystemClock.elapsedRealtime()
             if (now >= endAt) go(index + 1) else {
                 val sec = ((endAt - now + 999) / 1000).toInt()
-                if (sec != lastSec && lastSec != -1 && sec in 1..3) tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+                if (sec != lastSec && lastSec != -1 && sec in 1..3) sounds.play(sounds.countdown)
                 lastSec = sec
             }
             delay(50)
@@ -418,10 +424,10 @@ fun RunScreen(w: Workout, onExit: () -> Unit) {
                 if (done) "COMPLETATO" else phase.kind.label.uppercase(), Modifier.padding(top = 12.dp),
                 color = ring, fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp,
             )
-            Box(
-                Modifier.weight(1f).padding(vertical = 16.dp).aspectRatio(1f, matchHeightConstraintsFirst = true),
-                contentAlignment = Alignment.Center,
-            ) {
+            // the outer box takes the free space; the circle inside fits it without being cut at the sides
+            Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+            BoxWithConstraints(Modifier.aspectRatio(1f, matchHeightConstraintsFirst = true), contentAlignment = Alignment.Center) {
+                val big = (maxWidth.value * 0.3f).sp
                 Box(Modifier.fillMaxSize().glass(CircleShape, accent, .7f))
                 Canvas(Modifier.fillMaxSize().padding(12.dp)) {
                     val st = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
@@ -429,14 +435,15 @@ fun RunScreen(w: Workout, onExit: () -> Unit) {
                     drawArc(ring, -90f, 360f * frac, false, style = st)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(fmt(secLeft), fontSize = 80.sp, fontWeight = FontWeight.Light, style = Tnum)
+                    Text(fmt(secLeft), fontSize = big, fontWeight = FontWeight.Light, style = Tnum)
                     if (!done && phase.cycle > 0) {
                         Text(
                             "Ciclo ${phase.cycle}/${w.cycles}" + if (w.sets > 1) " · Serie ${phase.set}/${w.sets}" else "",
-                            color = Dim, fontSize = 16.sp, style = Tnum,
+                            color = Color.White.copy(alpha = .8f), fontSize = 22.sp, fontWeight = FontWeight.Medium, style = Tnum,
                         )
                     }
                 }
+            }
             }
             val next = phases.getOrNull(index + 1)
             Text(
@@ -445,10 +452,10 @@ fun RunScreen(w: Workout, onExit: () -> Unit) {
                     next == null -> "Ultimo intervallo"
                     else -> "Poi: ${next.kind.label} ${fmt(next.seconds)}"
                 },
-                color = Dim, fontSize = 16.sp, style = Tnum,
+                color = Color.White.copy(alpha = .8f), fontSize = 22.sp, fontWeight = FontWeight.Medium, style = Tnum,
             )
             Row(
-                Modifier.padding(vertical = 24.dp),
+                Modifier.padding(vertical = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(28.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -473,7 +480,13 @@ fun RunScreen(w: Workout, onExit: () -> Unit) {
                     RoundButton("Intervallo successivo", { go(index + 1) }, 60.dp) { Icon(Icons.Default.KeyboardArrowRight, null, Modifier.size(30.dp)) }
                 }
             }
-            Text("Rimanente ${fmt(totalLeft)}", Modifier.padding(bottom = 12.dp), color = Dim, fontSize = 14.sp, style = Tnum)
+            Column(
+                Modifier.fillMaxWidth().padding(bottom = 12.dp).glass(RoundedCornerShape(24.dp)).padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("TEMPO TOTALE RIMANENTE", color = Dim, fontSize = 13.sp, letterSpacing = 1.sp)
+                Text(fmt(totalLeft), fontSize = 44.sp, fontWeight = FontWeight.SemiBold, style = Tnum)
+            }
         }
     }
 }
